@@ -202,6 +202,9 @@ const LEVELS = [
       ...spaced(2500, 9500, 700, () => [
         { type:'ceiling', h:88 }, { type:'ceiling', h:88, dx:44 },
       ]),
+      ...spaced(1800, 9500, 650, () => [
+        { type:'midspike', wyFrac: 0.32 + Math.random()*0.22, h:36 },
+      ]),
     ],
     length: 10000,
   },
@@ -235,6 +238,13 @@ const LEVELS = [
       ]),
       ...spaced(3000, 12000, 500, () => [
         { type:'spike', h:80 },
+      ]),
+      ...spaced(1400, 12000, 480, () => [
+        { type:'midspike', wyFrac: 0.28 + Math.random()*0.26, h:42 },
+      ]),
+      ...spaced(2800, 12000, 750, () => [
+        { type:'midspike', wyFrac:0.30, h:40 },
+        { type:'midspike', wyFrac:0.30, h:40, dx:80 },
       ]),
     ],
     length: 12500,
@@ -285,6 +295,15 @@ const LEVELS = [
         { type:'spike', h:80, dx:38 },
         { type:'spike', h:72, dx:76 },
         { type:'spike', h:65, dx:114 },
+      ]),
+      // mid spikes every 350px
+      ...spaced(1100, 16000, 350, () => [
+        { type:'midspike', wyFrac: 0.25 + Math.random()*0.28, h:44 },
+      ]),
+      // mid-spike pairs
+      ...spaced(2200, 16000, 600, () => [
+        { type:'midspike', wyFrac:0.28, h:42, dx:0 },
+        { type:'midspike', wyFrac:0.28, h:42, dx:90 },
       ]),
     ],
     length: 16500,
@@ -338,6 +357,16 @@ const LEVELS = [
         { type:'block', wyFrac:0.22, bw:38, bh:38, dx:0 },
         { type:'spike', h:68, dx:80 },
         { type:'block', wyFrac:0.22, bw:38, bh:38, dx:80 },
+      ]),
+      // mid spikes dense — every 200px
+      ...spaced(900, 18000, 200, () => [
+        { type:'midspike', wyFrac: 0.22 + Math.random()*0.32, h:48 },
+      ]),
+      // mid-spike triplets — 3 in a row to navigate through
+      ...spaced(1500, 18000, 450, () => [
+        { type:'midspike', wyFrac:0.25, h:46, dx:0 },
+        { type:'midspike', wyFrac:0.45, h:46, dx:80 },
+        { type:'midspike', wyFrac:0.25, h:46, dx:160 },
       ]),
     ],
     length: 18500,
@@ -631,7 +660,40 @@ function drawFinishGate(sx, groundY) {
   ctx.textAlign = 'left';
 }
 
-// ── Main loop ─────────────────────────────────────────────────────────
+function drawMidSpike(sx, sy, h, w) {
+  // spike pointing right (from left wall) — actually a spike at mid height pointing up AND down
+  const base = w || 38;
+  // upward spike
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(sx + base, sy);
+  ctx.lineTo(sx + base/2, sy - h);
+  ctx.closePath();
+  const gUp = ctx.createLinearGradient(sx, sy, sx, sy - h);
+  gUp.addColorStop(0, '#ffaa00');
+  gUp.addColorStop(1, '#ff4400');
+  ctx.fillStyle = gUp;
+  ctx.fill();
+  ctx.strokeStyle = '#ffcc00';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // downward spike
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(sx + base, sy);
+  ctx.lineTo(sx + base/2, sy + h);
+  ctx.closePath();
+  const gDown = ctx.createLinearGradient(sx, sy, sx, sy + h);
+  gDown.addColorStop(0, '#ffaa00');
+  gDown.addColorStop(1, '#ff0000');
+  ctx.fillStyle = gDown;
+  ctx.fill();
+  ctx.strokeStyle = '#ffcc00';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+
 let lastTime = null;
 
 function loop(ts) {
@@ -703,6 +765,13 @@ function loop(ts) {
         const bl = sx, br = sx + ob.bw;
         const bt = by, bb = by + ob.bh;
         if (cubeRight > bl && cubeLeft < br && cubeBottom > bt && cubeTop < bb) { hit = true; break; }
+      } else if (ob.type === 'midspike') {
+        const my = ob.wyFrac * groundY;
+        const ml = sx + 6, mr = sx + 32;
+        // both up and down spikes count
+        if (cubeRight > ml && cubeLeft < mr) {
+          if (cubeTop < my + ob.h * 0.85 && cubeBottom > my - ob.h * 0.85) { hit = true; break; }
+        }
       }
     }
 
@@ -801,6 +870,9 @@ function loop(ts) {
     } else if (ob.type === 'block') {
       ctx.shadowColor = '#ff6600';
       drawBlock(sx, ob.wyFrac * groundY, ob.bw, ob.bh);
+    } else if (ob.type === 'midspike') {
+      ctx.shadowColor = '#ffaa00';
+      drawMidSpike(sx, ob.wyFrac * groundY, ob.h);
     }
     ctx.shadowBlur = 0;
   }
