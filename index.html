@@ -133,16 +133,17 @@ const LEVELS = [
   {
     num: 1,
     name: 'Anfänger',
-    speed: 230,
+    speed: 260,
     bgTop: '#0a0015', bgBot: '#0d0030',
     groundColor: '#1a1a44',
     glowColor: '#4466ff',
     starColor: 'rgba(255,255,255,',
-    // obstacles: array of {type, wx, ...}
     obstacles: [
-      // only ground spikes, single, well spaced
-      ...spaced(600, 6200, 500, () => [
-        { type:'spike', h: 42 }
+      ...spaced(600, 6200, 340, () => Math.random()<0.35
+        ? [{ type:'spike', h:46 }, { type:'spike', h:46, dx:38 }]
+        : [{ type:'spike', h:50 }]),
+      ...spaced(1400, 6200, 800, () => [
+        { type:'ceiling', h: 52 + Math.random()*18 }
       ]),
     ],
     length: 6800,
@@ -150,17 +151,20 @@ const LEVELS = [
   {
     num: 2,
     name: 'Normal',
-    speed: 300,
+    speed: 330,
     bgTop: '#001520', bgBot: '#002233',
     groundColor: '#0a2233',
     glowColor: '#00aaff',
     starColor: 'rgba(150,220,255,',
     obstacles: [
-      ...spaced(600, 7500, 380, () => Math.random()<0.4
-        ? [{ type:'spike', h:44 }, { type:'spike', h:44, dx:38 }]
-        : [{ type:'spike', h:50 }]),
-      ...spaced(900, 7500, 600, () => [
-        { type:'ceiling', h: 55 + Math.random()*20 }
+      ...spaced(600, 7500, 260, () => Math.random()<0.5
+        ? [{ type:'spike', h:50 }, { type:'spike', h:50, dx:38 }]
+        : [{ type:'spike', h:56 }]),
+      ...spaced(800, 7500, 380, () => [
+        { type:'ceiling', h: 60 + Math.random()*25 }
+      ]),
+      ...spaced(1500, 7500, 600, () => [
+        { type:'block', wyFrac: 0.3 + Math.random()*0.2, bw:38, bh:34 }
       ]),
     ],
     length: 8000,
@@ -168,77 +172,95 @@ const LEVELS = [
   {
     num: 3,
     name: 'Schwer',
-    speed: 370,
+    speed: 410,
     bgTop: '#150010', bgBot: '#2a0020',
     groundColor: '#2a001a',
     glowColor: '#ff00aa',
     starColor: 'rgba(255,150,220,',
     obstacles: [
-      ...spaced(600, 9000, 300, () => Math.random()<0.5
-        ? [{ type:'spike', h:50 }, { type:'spike', h:50, dx:38 }]
-        : [{ type:'spike', h:55 }]),
-      ...spaced(750, 9000, 350, () => [
-        { type:'ceiling', h: 60 + Math.random()*30 }
+      ...spaced(600, 9500, 200, () => {
+        const n = Math.random()<0.5 ? 3 : 2;
+        return Array.from({length:n}, (_,i) => ({ type:'spike', h:54+i*5, dx:i*38 }));
+      }),
+      ...spaced(700, 9500, 240, () => [
+        { type:'ceiling', h: 68 + Math.random()*30 }
       ]),
-      ...spaced(1200, 9000, 700, () => [
-        { type:'block', wyFrac: 0.3 + Math.random()*0.2, bw:35, bh:32 }
+      ...spaced(1100, 9500, 400, () => [
+        { type:'block', wyFrac: 0.25 + Math.random()*0.25, bw:42, bh:36 }
+      ]),
+      // spike under ceiling combos
+      ...spaced(2000, 9500, 600, () => [
+        { type:'spike', h:54 },
+        { type:'ceiling', h:72, dx:0 },
       ]),
     ],
-    length: 9500,
+    length: 10000,
   },
   {
     num: 4,
     name: 'Extrem',
-    speed: 450,
+    speed: 500,
     bgTop: '#100500', bgBot: '#281000',
     groundColor: '#281000',
     glowColor: '#ff6600',
     starColor: 'rgba(255,200,100,',
     obstacles: [
-      ...spaced(600, 11000, 240, () => {
-        const n = Math.random()<0.5 ? 3 : Math.random()<0.5 ? 2 : 1;
-        return Array.from({length:n}, (_,i) => ({ type:'spike', h:52+i*4, dx:i*38 }));
+      ...spaced(600, 12000, 160, () => {
+        const n = Math.random()<0.4 ? 4 : Math.random()<0.5 ? 3 : 2;
+        return Array.from({length:n}, (_,i) => ({ type:'spike', h:58+i*5, dx:i*38 }));
       }),
-      ...spaced(700, 11000, 280, () => [
-        { type:'ceiling', h: 65 + Math.random()*35 }
+      ...spaced(650, 12000, 190, () => [
+        { type:'ceiling', h: 72 + Math.random()*40 }
       ]),
-      ...spaced(1000, 11000, 420, () => [
-        { type:'block', wyFrac: 0.25 + Math.random()*0.3, bw:40, bh:35 }
+      ...spaced(900, 12000, 300, () => [
+        { type:'block', wyFrac: 0.2 + Math.random()*0.3, bw:46, bh:38 }
       ]),
-      // spike+ceiling combos
-      ...spaced(2000, 11000, 800, () => [
-        { type:'spike', h:48 },
-        { type:'ceiling', h:60, dx:80 },
+      // tight combos: spike + ceiling same X
+      ...spaced(1500, 12000, 500, () => [
+        { type:'spike',   h:56 },
+        { type:'ceiling', h:78, dx:0 },
+        { type:'block',   wyFrac:0.38, bw:34, bh:34, dx:160 },
+      ]),
+      // double ceiling wall
+      ...spaced(3000, 12000, 900, () => [
+        { type:'ceiling', h:90 },
+        { type:'ceiling', h:90, dx:50 },
       ]),
     ],
-    length: 11500,
+    length: 12500,
   },
   {
     num: 5,
     name: 'WAHNSINN',
-    speed: 560,
+    speed: 620,
     bgTop: '#050000', bgBot: '#150000',
     groundColor: '#200000',
     glowColor: '#ff0000',
     starColor: 'rgba(255,100,100,',
     obstacles: [
-      ...spaced(600, 13000, 180, () => {
-        const n = 1 + Math.floor(Math.random()*3);
-        return Array.from({length:n}, (_,i) => ({ type:'spike', h:55+i*5, dx:i*38 }));
+      // near-constant spikes, groups of 2-5
+      ...spaced(600, 15000, 130, () => {
+        const n = 2 + Math.floor(Math.random()*4);
+        return Array.from({length:n}, (_,i) => ({ type:'spike', h:62+i*5, dx:i*38 }));
       }),
-      ...spaced(650, 13000, 200, () => [
-        { type:'ceiling', h: 70 + Math.random()*45 }
+      // dense ceiling spikes
+      ...spaced(650, 15000, 150, () => [
+        { type:'ceiling', h: 80 + Math.random()*50 }
       ]),
-      ...spaced(900, 13000, 320, () => [
-        { type:'block', wyFrac: 0.2 + Math.random()*0.35, bw:45, bh:38 }
+      // mid-air blocks at varying heights
+      ...spaced(800, 15000, 220, () => [
+        { type:'block', wyFrac: 0.18 + Math.random()*0.38, bw:50, bh:40 }
       ]),
-      ...spaced(1500, 13000, 500, () => [
-        { type:'spike', h:52 },
-        { type:'ceiling', h:65, dx:60 },
-        { type:'block', wyFrac:0.35, bw:30, bh:30, dx:160 },
+      // gauntlet: spike + ceiling + block all at once
+      ...spaced(1200, 15000, 380, () => [
+        { type:'spike',   h:60 },
+        { type:'ceiling', h:85, dx:0 },
+        { type:'block',   wyFrac:0.32, bw:38, bh:38, dx:120 },
+        { type:'ceiling', h:75, dx:220 },
+        { type:'spike',   h:58, dx:260 },
       ]),
     ],
-    length: 13500,
+    length: 15500,
   },
 ];
 
