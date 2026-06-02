@@ -141,6 +141,7 @@ let won       = false;
 let cubeY     = 0;
 let velY      = 0;
 let onGround  = true;
+let jumpsLeft = 2;
 let worldX    = 0;   // how far we've scrolled (world px)
 let score     = 0;
 let speed     = BASE_SPEED;
@@ -169,9 +170,10 @@ function resetGame() {
   score    = 0;
   speed    = BASE_SPEED;
   worldX   = 0;
-  velY     = 0;
-  onGround = true;
-  rotAngle = 0;
+  velY      = 0;
+  onGround  = true;
+  jumpsLeft = 2;
+  rotAngle  = 0;
   particles = [];
   obstacles = buildLevel();
   buildBG();
@@ -187,7 +189,11 @@ function resetGame() {
 // ── Input ─────────────────────────────────────────────────────────────
 function doJump() {
   if (!running || dead || won) return;
-  if (onGround) { velY = JUMP_V; onGround = false; }
+  if (jumpsLeft > 0) {
+    velY = JUMP_V;
+    onGround = false;
+    jumpsLeft--;
+  }
 }
 window.addEventListener('contextmenu', e => { e.preventDefault(); doJump(); });
 window.addEventListener('keydown', e => {
@@ -345,9 +351,10 @@ function loop(ts) {
     cubeY += velY * dt;
     const groundedY = groundY - CUBE_SIZE;
     if (cubeY >= groundedY) {
-      cubeY    = groundedY;
-      velY     = 0;
-      onGround = true;
+      cubeY     = groundedY;
+      velY      = 0;
+      onGround  = true;
+      jumpsLeft = 2;
     } else {
       onGround = false;
     }
