@@ -60,8 +60,8 @@
 
 <div id="overlay">
   <h1>&#x25A0; Cube Dash</h1>
-  <p>Spring über die Spitzen!</p>
-  <p>Rechtsklick, Leertaste oder Tippen</p>
+  <p>Spring und fliege über Hindernisse!</p>
+  <p>Tippen / Klicken = Springen &nbsp;|&nbsp; Halten = Fliegen</p>
   <button class="btn-blue" id="start-btn">Spielen</button>
 </div>
 <div id="gameover">
@@ -108,27 +108,41 @@ COLORS.forEach((c, i) => {
 });
 
 // ── Game constants ────────────────────────────────────────────────────
-const GROUND_RATIO = 0.75;   // ground Y as fraction of height
+const GROUND_RATIO = 0.75;
 const CUBE_SIZE    = 40;
-const GRAVITY      = 1800;   // px/s²
-const JUMP_V       = -680;   // px/s (upward = negative)
-const BASE_SPEED   = 280;    // px/s
+const GRAVITY      = 1800;
+const FLY_THRUST   = -2600;  // upward force while holding
+const JUMP_V       = -680;
+const BASE_SPEED   = 280;
 
 // Level: spike positions in "world units" (pixels from start)
 // Level total length (world px)
 const LEVEL_LEN = 7000;
 const FINISH_X  = LEVEL_LEN + 200;
 
-// Spike definitions: [worldX, width, height] or groups
+// obs types: { type:'spike', wx, h } | { type:'floater', wx, wy, w, h }
+// wy = y offset above ground (fraction of groundY), floater = hanging spike from sky
 function buildLevel() {
   const obs = [];
-  const gaps = [0, 500, 900, 1300, 1650, 1950, 2250, 2600, 2900, 3200,
-                3500, 3750, 4000, 4300, 4600, 4850, 5100, 5350, 5600, 5900, 6200, 6500];
-  for (const wx of gaps) {
-    const x = wx + 600;
-    const n = Math.random() < 0.4 ? 2 : 1;
+  const spikeXs = [600,1100,1500,1900,2250,2550,2850,3150,3450,3700,
+                   3950,4250,4550,4800,5050,5300,5550,5850,6150,6450];
+  for (const x of spikeXs) {
+    const n = Math.random() < 0.35 ? 2 : 1;
     for (let i = 0; i < n; i++) {
-      obs.push({ wx: x + i * 38, h: 44 + Math.random() * 20 });
+      obs.push({ type:'spike', wx: x + i*38, h: 44 + Math.random()*22 });
+    }
+  }
+  // Floating obstacles (hang from ceiling / mid-air blocks to dodge under or over)
+  const floatXs = [800,1300,1750,2100,2400,2700,3000,3300,3600,3900,4200,4500,4750,5000,5250,5500,5750,6000,6300,6600];
+  for (const x of floatXs) {
+    // alternate: ceiling spike or mid-air block
+    if (Math.random() < 0.5) {
+      // ceiling spike (points downward)
+      obs.push({ type:'ceiling', wx: x, h: 50 + Math.random()*30 });
+    } else {
+      // mid-air block
+      const floatH = 0.25 + Math.random() * 0.25; // fraction of groundY from top
+      obs.push({ type:'block', wx: x, wyFrac: floatH, bw: 30 + Math.random()*20, bh: 30 });
     }
   }
   return obs;
@@ -142,6 +156,7 @@ let cubeY     = 0;
 let velY      = 0;
 let onGround  = true;
 let jumpsLeft = 2;
+let flying    = false;  // holding button = fly mode
 let worldX    = 0;   // how far we've scrolled (world px)
 let score     = 0;
 let speed     = BASE_SPEED;
@@ -173,6 +188,7 @@ function resetGame() {
   velY      = 0;
   onGround  = true;
   jumpsLeft = 2;
+  flying    = false;
   rotAngle  = 0;
   particles = [];
   obstacles = buildLevel();
@@ -187,19 +203,28 @@ function resetGame() {
 }
 
 // ── Input ─────────────────────────────────────────────────────────────
-function doJump() {
+function pressStart() {
   if (!running || dead || won) return;
   if (jumpsLeft > 0) {
     velY = JUMP_V;
     onGround = false;
     jumpsLeft--;
   }
+  flying = true;
 }
-window.addEventListener('contextmenu', e => { e.preventDefault(); doJump(); });
+function pressEnd() { flying = false; }
+
+window.addEventListener('contextmenu', e => { e.preventDefault(); pressStart(); });
+window.addEventListener('mousedown',   e => { if (e.button === 2) return; pressStart(); });
+window.addEventListener('mouseup',     () => pressEnd());
 window.addEventListener('keydown', e => {
-  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); doJump(); }
+  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); pressStart(); }
 });
-window.addEventListener('touchstart', e => { e.preventDefault(); doJump(); }, { passive: false });
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') pressEnd();
+});
+window.addEventListener('touchstart', e => { e.preventDefault(); pressStart(); }, { passive: false });
+window.addEventListener('touchend',   e => { e.preventDefault(); pressEnd();   }, { passive: false });
 
 document.getElementById('start-btn').addEventListener('click', () => {
   document.getElementById('overlay').style.display = 'none';
@@ -241,7 +266,7 @@ function hexToRgb(hex) {
 function drawSpike(sx, groundY, h, w) {
   const base = w || 38;
   ctx.beginPath();
-  ctx.moveTo(sx,        groundY);
+  ctx.moveTo(sx, groundY);
   ctx.lineTo(sx + base, groundY);
   ctx.lineTo(sx + base/2, groundY - h);
   ctx.closePath();
@@ -253,6 +278,37 @@ function drawSpike(sx, groundY, h, w) {
   ctx.strokeStyle = '#ff0055';
   ctx.lineWidth = 1.5;
   ctx.stroke();
+}
+
+function drawCeilingSpike(sx, h, w) {
+  const base = w || 38;
+  ctx.beginPath();
+  ctx.moveTo(sx, 0);
+  ctx.lineTo(sx + base, 0);
+  ctx.lineTo(sx + base/2, h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(sx, 0, sx, h);
+  grad.addColorStop(0, '#aa00ff');
+  grad.addColorStop(1, '#ff00aa');
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = '#cc00ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
+function drawBlock(sx, by, bw, bh) {
+  const grad = ctx.createLinearGradient(sx, by, sx, by + bh);
+  grad.addColorStop(0, '#ff6600');
+  grad.addColorStop(1, '#ff2200');
+  ctx.fillStyle = grad;
+  ctx.fillRect(sx, by, bw, bh);
+  ctx.strokeStyle = '#ff8800';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(sx, by, bw, bh);
+  // inner shine
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.fillRect(sx + 3, by + 3, bw - 6, bh * 0.4);
 }
 
 function drawCube(sx, sy, color) {
@@ -346,9 +402,18 @@ function loop(ts) {
     const dist = speed * dt;
     worldX += dist;
 
-    // Physics
-    velY  += GRAVITY * dt;
+    // Physics — fly thrust overrides gravity while held in air
+    if (flying && !onGround) {
+      velY += FLY_THRUST * dt;
+      velY  = Math.max(velY, -500); // cap upward speed
+    } else {
+      velY += GRAVITY * dt;
+    }
     cubeY += velY * dt;
+
+    // Ceiling clamp
+    if (cubeY < 0) { cubeY = 0; velY = 0; }
+
     const groundedY = groundY - CUBE_SIZE;
     if (cubeY >= groundedY) {
       cubeY     = groundedY;
@@ -359,35 +424,49 @@ function loop(ts) {
       onGround = false;
     }
 
-    // Rolling
-    rotAngle += dist / (CUBE_SIZE / 2) * (onGround ? 1 : 0.3);
+    // Rolling (spin faster when flying)
+    rotAngle += dist / (CUBE_SIZE / 2) * (onGround ? 1 : flying ? 2 : 0.5);
 
     // Score
     score += dist / 10;
     speed  = BASE_SPEED + Math.floor(score / 80) * 18;
 
     // Collision check
+    const cubeLeft   = cubeScreenX + 5;
+    const cubeRight  = cubeScreenX + CUBE_SIZE - 5;
+    const cubeTop    = cubeY + 5;
+    const cubeBottom = cubeY + CUBE_SIZE - 5;
+    let hit = false;
+
     for (const ob of obstacles) {
       const sx = ob.wx - worldX + cubeScreenX;
-      // spike hitbox (narrower than visual)
-      const spikeLeft  = sx + 6;
-      const spikeRight = sx + 32;
-      const cubeLeft   = cubeScreenX + 4;
-      const cubeRight  = cubeScreenX + CUBE_SIZE - 4;
-      const cubeBottom = cubeY + CUBE_SIZE;
-      const spikeTop   = groundY - ob.h + 8;
+      if (sx < -100 || sx > canvas.width + 100) continue;
 
-      if (cubeRight > spikeLeft && cubeLeft < spikeRight && cubeBottom > spikeTop) {
-        // Dead
-        dead    = false; // keep cube visible briefly
-        running = false;
-        spawnParticles(cubeScreenX + CUBE_SIZE/2, cubeY + CUBE_SIZE/2, COLORS[colorIdx]);
-        setTimeout(() => {
-          document.getElementById('go-score').textContent = 'Score: ' + Math.floor(score);
-          document.getElementById('gameover').style.display = 'flex';
-        }, 600);
-        break;
+      if (ob.type === 'spike') {
+        const sl = sx + 6, sr = sx + 32;
+        const st = groundY - ob.h + 10;
+        if (cubeRight > sl && cubeLeft < sr && cubeBottom > st) { hit = true; break; }
+
+      } else if (ob.type === 'ceiling') {
+        const sl = sx + 6, sr = sx + 32;
+        const sb = ob.h - 10; // bottom of ceiling spike
+        if (cubeRight > sl && cubeLeft < sr && cubeTop < sb) { hit = true; break; }
+
+      } else if (ob.type === 'block') {
+        const by = ob.wyFrac * groundY;
+        const bl = sx, br = sx + ob.bw;
+        const bt = by, bb = by + ob.bh;
+        if (cubeRight > bl && cubeLeft < br && cubeBottom > bt && cubeTop < bb) { hit = true; break; }
       }
+    }
+
+    if (hit) {
+      running = false;
+      spawnParticles(cubeScreenX + CUBE_SIZE/2, cubeY + CUBE_SIZE/2, COLORS[colorIdx]);
+      setTimeout(() => {
+        document.getElementById('go-score').textContent = 'Score: ' + Math.floor(score);
+        document.getElementById('gameover').style.display = 'flex';
+      }, 600);
     }
 
     // Win check
@@ -460,11 +539,33 @@ function loop(ts) {
   // Obstacles
   for (const ob of obstacles) {
     const sx = ob.wx - worldX + cubeScreenX;
-    if (sx < -60 || sx > W + 60) continue;
+    if (sx < -100 || sx > W + 100) continue;
     ctx.shadowBlur = 10;
-    ctx.shadowColor = '#ff2244';
-    drawSpike(sx, groundY, ob.h);
+    if (ob.type === 'spike') {
+      ctx.shadowColor = '#ff2244';
+      drawSpike(sx, groundY, ob.h);
+    } else if (ob.type === 'ceiling') {
+      ctx.shadowColor = '#cc00ff';
+      drawCeilingSpike(sx, ob.h);
+    } else if (ob.type === 'block') {
+      ctx.shadowColor = '#ff6600';
+      drawBlock(sx, ob.wyFrac * groundY, ob.bw, ob.bh);
+    }
     ctx.shadowBlur = 0;
+  }
+
+  // Flying indicator (rocket trail when flying)
+  if (flying && running && !dead && !won) {
+    const cx = cubeScreenX + CUBE_SIZE/2;
+    const cy = cubeY + CUBE_SIZE;
+    for (let i = 0; i < 3; i++) {
+      ctx.globalAlpha = 0.4 - i * 0.12;
+      ctx.fillStyle = i % 2 === 0 ? '#ffcc00' : '#ff4400';
+      ctx.beginPath();
+      ctx.arc(cx + (Math.random()-0.5)*10, cy + i*10 + Math.random()*6, 5-i, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Finish gate
@@ -496,7 +597,7 @@ function loop(ts) {
     ctx.font = 'bold 24px Arial';
     ctx.shadowColor = '#00ffff';
     ctx.shadowBlur  = 10;
-    ctx.fillText('Score: ' + Math.floor(score), 16, 36);
+    ctx.fillText('Score: ' + Math.floor(score) + (flying ? '  🚀' : ''), 16, 36);
     ctx.shadowBlur = 0;
 
     // Progress bar
