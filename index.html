@@ -289,6 +289,59 @@ const LEVELS = [
     ],
     length: 16500,
   },
+  {
+    num: 6,
+    name: '☠ HÖLLE',
+    speed: 920,
+    bgTop: '#000000', bgBot: '#0d0000',
+    groundColor: '#0d0000',
+    glowColor: '#ff0000',
+    starColor: 'rgba(255,50,50,',
+    obstacles: [
+      // nonstop 5-7 spike walls every 70px
+      ...spaced(600, 18000, 70, () => {
+        const n = 5 + Math.floor(Math.random()*3);
+        return Array.from({length:n}, (_,i) => ({ type:'spike', h:70+i*7, dx:i*38 }));
+      }),
+      // ceiling every 80px
+      ...spaced(600, 18000, 80, () => [
+        { type:'ceiling', h: 95 + Math.random()*65 }
+      ]),
+      // blocks every 110px at all heights
+      ...spaced(600, 18000, 110, () => [
+        { type:'block', wyFrac: 0.12 + Math.random()*0.48, bw:55, bh:45 }
+      ]),
+      // brutal 8-piece gauntlets
+      ...spaced(800, 18000, 220, () => [
+        { type:'spike',   h:70 },
+        { type:'ceiling', h:100, dx:0 },
+        { type:'block',   wyFrac:0.28, bw:44, bh:44, dx:100 },
+        { type:'ceiling', h:90,  dx:180 },
+        { type:'spike',   h:72,  dx:220 },
+        { type:'block',   wyFrac:0.18, bw:40, bh:40, dx:300 },
+        { type:'spike',   h:75,  dx:340 },
+        { type:'ceiling', h:95,  dx:340 },
+      ]),
+      // 5-spike ceiling walls
+      ...spaced(1200, 18000, 400, () => [
+        { type:'ceiling', h:110 }, { type:'ceiling', h:110, dx:44 },
+        { type:'ceiling', h:110, dx:88 }, { type:'ceiling', h:110, dx:132 },
+        { type:'ceiling', h:110, dx:176 },
+      ]),
+      // mega spikes h:100+
+      ...spaced(700, 18000, 90, () => [
+        { type:'spike', h:95 + Math.random()*30 },
+      ]),
+      // double-layer: spike below + block above aligned
+      ...spaced(1600, 18000, 320, () => [
+        { type:'spike', h:68, dx:0 },
+        { type:'block', wyFrac:0.22, bw:38, bh:38, dx:0 },
+        { type:'spike', h:68, dx:80 },
+        { type:'block', wyFrac:0.22, bw:38, bh:38, dx:80 },
+      ]),
+    ],
+    length: 18500,
+  },
 ];
 
 // Helper: generate evenly spaced obstacle groups
@@ -395,7 +448,7 @@ window.addEventListener('touchend',   e => { e.preventDefault(); pressEnd();   }
 
 // Build level-select buttons
 const levelGrid = document.getElementById('level-grid');
-const DIFF_COLORS = ['#00aaff','#44ee44','#ffcc00','#ff8800','#ff3333'];
+const DIFF_COLORS = ['#00aaff','#44ee44','#ffcc00','#ff8800','#ff3333','#880000'];
 LEVELS.forEach((lv, i) => {
   const btn = document.createElement('button');
   btn.style.cssText = `padding:12px 20px;font-size:17px;font-weight:bold;border:none;
