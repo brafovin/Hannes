@@ -259,6 +259,20 @@ const LEVELS = [
         { type:'ceiling', h:75, dx:220 },
         { type:'spike',   h:58, dx:260 },
       ]),
+      // extra tall ground spikes sprinkled everywhere
+      ...spaced(700, 15000, 170, () => [
+        { type:'spike', h:72 + Math.random()*20 },
+      ]),
+      // pairs of tall spikes close together
+      ...spaced(1000, 15000, 280, () => [
+        { type:'spike', h:68, dx:0 },
+        { type:'spike', h:75, dx:38 },
+        { type:'spike', h:68, dx:76 },
+      ]),
+      // isolated mega-spike
+      ...spaced(2500, 15000, 700, () => [
+        { type:'spike', h:90 },
+      ]),
     ],
     length: 15500,
   },
