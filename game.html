@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Cube Dash 3D</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: Arial, sans-serif; }
+    canvas { display: block; }
+    #ui {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: white;
+      z-index: 10;
+    }
+    #score {
+      font-size: 28px;
+      font-weight: bold;
+      text-shadow: 0 0 10px cyan;
+    }
+    #controls {
+      margin-top: 6px;
+      font-size: 13px;
+      opacity: 0.7;
+    }
+    #color-panel {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+    #color-panel span {
+      color: white;
+      font-size: 13px;
+      text-align: center;
+      opacity: 0.8;
+    }
+    .color-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      border: 3px solid transparent;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+    .color-btn:hover { transform: scale(1.15); }
+    .color-btn.active { border-color: white; transform: scale(1.2); }
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      color: white;
+    }
+    #overlay h1 { font-size: 52px; text-shadow: 0 0 20px cyan; margin-bottom: 10px; }
+    #overlay p  { font-size: 18px; opacity: 0.8; margin-bottom: 6px; }
+    #start-btn {
+      margin-top: 24px;
+      padding: 14px 48px;
+      font-size: 22px;
+      background: linear-gradient(135deg, #00f2ff, #0080ff);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 0 20px #0080ff88;
+      transition: transform 0.1s;
+    }
+    #start-btn:hover { transform: scale(1.05); }
+    #gameover {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      color: white;
+    }
+    #gameover h2 { font-size: 52px; color: #ff4444; text-shadow: 0 0 20px red; }
+    #gameover p  { font-size: 22px; margin-top: 10px; }
+    #retry-btn {
+      margin-top: 24px;
+      padding: 14px 48px;
+      font-size: 22px;
+      background: linear-gradient(135deg, #ff4444, #ff8800);
+      border: none;
+      border-radius: 12px;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 0 20px #ff444488;
+    }
+    #retry-btn:hover { transform: scale(1.05); }
+  </style>
+</head>
+<body>
+
+<div id="ui">
+  <div id="score">Score: 0</div>
+  <div id="controls">Rechtsklick / Leertaste = Springen</div>
+</div>
+
+<div id="color-panel">
+  <span>Farbe</span>
+</div>
+
+<div id="overlay">
+  <h1>&#x25A0; Cube Dash 3D</h1>
+  <p>Spring über die Spitzen!</p>
+  <p>Rechtsklick oder Leertaste zum Springen</p>
+  <p>Rechts: Würfelfarbe ändern</p>
+  <button id="start-btn">Spielen</button>
+</div>
+
+<div id="gameover">
+  <h2>&#x2715; Game Over</h2>
+  <p id="final-score"></p>
+  <button id="retry-btn">Nochmal</button>
+</div>
+
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+// ── Colors ───────────────────────────────────────────────────────────
+const CUBE_COLORS = [
+  { hex: '#00aaff', label: 'Blau'     },
+  { hex: '#ff4444', label: 'Rot'      },
+  { hex: '#44ff44', label: 'Grün'     },
+  { hex: '#ffcc00', label: 'Gelb'     },
+  { hex: '#ff44ff', label: 'Lila'     },
+  { hex: '#ff8800', label: 'Orange'   },
+  { hex: '#00ffcc', label: 'Cyan'     },
+  { hex: '#ffffff', label: 'Weiß'     },
+];
+
+let cubeColorIndex = 0;
+
+// Build color panel
+const panel = document.getElementById('color-panel');
+CUBE_COLORS.forEach((c, i) => {
+  const btn = document.createElement('div');
+  btn.className = 'color-btn' + (i === 0 ? ' active' : '');
+  btn.style.background = c.hex;
+  btn.title = c.label;
+  btn.addEventListener('click', () => {
+    cubeColorIndex = i;
+    document.querySelectorAll('.color-btn').forEach((b, j) =>
+      b.classList.toggle('active', j === i));
+    if (cube) cube.material.color.set(c.hex);
+    if (cube) cube.material.emissive.set(c.hex);
+  });
+  panel.appendChild(btn);
+});
+
+// ── Scene ─────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0015);
+scene.fog = new THREE.Fog(0x0a0015, 30, 80);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(-4, 4, 10);
+camera.lookAt(2, 1, 0);
+
+// Lights
+const ambient = new THREE.AmbientLight(0x334466, 1.2);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+sun.position.set(-10, 20, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 100;
+sun.shadow.camera.left = -40;
+sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 20;
+sun.shadow.camera.bottom = -5;
+scene.add(sun);
+const fillLight = new THREE.PointLight(0x0044ff, 2, 30);
+fillLight.position.set(5, 5, 5);
+scene.add(fillLight);
+
+// ── Floor ─────────────────────────────────────────────────────────────
+const FLOOR_WIDTH  = 6;
+const FLOOR_LENGTH = 300;
+const floorGeo = new THREE.BoxGeometry(FLOOR_WIDTH, 0.5, FLOOR_LENGTH);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x111133,
+  roughness: 0.8,
+  metalness: 0.2,
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.position.set(0, -0.25, -FLOOR_LENGTH / 2 + 10);
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grid lines on floor
+const gridHelper = new THREE.GridHelper(FLOOR_LENGTH, FLOOR_LENGTH, 0x224488, 0x224488);
+gridHelper.position.set(0, 0.01, -FLOOR_LENGTH / 2 + 10);
+gridHelper.material.opacity = 0.3;
+gridHelper.material.transparent = true;
+scene.add(gridHelper);
+
+// ── Cube ──────────────────────────────────────────────────────────────
+const CUBE_SIZE = 0.8;
+const cubeGeo = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE);
+const cubeMat = new THREE.MeshStandardMaterial({
+  color: CUBE_COLORS[0].hex,
+  emissive: CUBE_COLORS[0].hex,
+  emissiveIntensity: 0.4,
+  roughness: 0.3,
+  metalness: 0.7,
+});
+let cube = new THREE.Mesh(cubeGeo, cubeMat);
+cube.castShadow = true;
+cube.position.set(0, CUBE_SIZE / 2, 0);
+scene.add(cube);
+
+// Cube glow
+const glowLight = new THREE.PointLight(0x00aaff, 1.5, 3);
+scene.add(glowLight);
+
+// ── Stars ─────────────────────────────────────────────────────────────
+{
+  const starGeo = new THREE.BufferGeometry();
+  const verts = [];
+  for (let i = 0; i < 2000; i++) {
+    verts.push((Math.random() - 0.5) * 200, Math.random() * 50 + 5, (Math.random() - 0.5) * 200);
+  }
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 });
+  scene.add(new THREE.Points(starGeo, starMat));
+}
+
+// ── Spikes ────────────────────────────────────────────────────────────
+const SPIKE_COLORS = [0xff2244, 0xff6600, 0xff0088];
+const spikes = [];
+
+function makeSpikeGroup(x, z, count = 1) {
+  const group = [];
+  for (let i = 0; i < count; i++) {
+    const h = 0.9 + Math.random() * 0.4;
+    const geo = new THREE.ConeGeometry(0.35, h, 4);
+    const mat = new THREE.MeshStandardMaterial({
+      color: SPIKE_COLORS[Math.floor(Math.random() * SPIKE_COLORS.length)],
+      emissive: 0xff1100,
+      emissiveIntensity: 0.3,
+      roughness: 0.4,
+      metalness: 0.6,
+    });
+    const spike = new THREE.Mesh(geo, mat);
+    spike.castShadow = true;
+    spike.position.set(x + i * 0.75, h / 2, z);
+    spike.userData.height = h;
+    scene.add(spike);
+    group.push(spike);
+  }
+  return group;
+}
+
+function spawnObstacles() {
+  spikes.length = 0;
+  const positions = [
+    12, 20, 28, 36, 42, 48, 55, 62, 70, 78, 86, 94, 102, 110, 120, 130, 140, 150, 160, 170
+  ];
+  for (const z of positions) {
+    const count = Math.random() < 0.4 ? 2 : 1;
+    const group = makeSpikeGroup(-0.2, -z, count);
+    spikes.push(...group);
+  }
+}
+
+// ── Game State ────────────────────────────────────────────────────────
+let running = false;
+let dead    = false;
+let score   = 0;
+let speed   = 5;
+let velY    = 0;
+let onGround = true;
+const GRAVITY = -22;
+const JUMP_V  = 9;
+const GROUND_Y = CUBE_SIZE / 2;
+
+const scoreEl    = document.getElementById('score');
+const overlay    = document.getElementById('overlay');
+const gameoverEl = document.getElementById('gameover');
+const finalScore = document.getElementById('final-score');
+
+function resetGame() {
+  dead  = false;
+  score = 0;
+  speed = 5;
+  velY  = 0;
+  onGround = true;
+
+  // remove old spikes
+  spikes.forEach(s => scene.remove(s));
+  spawnObstacles();
+
+  cube.position.set(0, GROUND_Y, 0);
+  cube.rotation.set(0, 0, 0);
+  cubeMat.color.set(CUBE_COLORS[cubeColorIndex].hex);
+  cubeMat.emissive.set(CUBE_COLORS[cubeColorIndex].hex);
+
+  gameoverEl.style.display = 'none';
+  running = true;
+}
+
+function doJump() {
+  if (!running || dead) return;
+  if (onGround) {
+    velY = JUMP_V;
+    onGround = false;
+  }
+}
+
+// ── Input ──────────────────────────────────────────────────────────────
+window.addEventListener('contextmenu', e => { e.preventDefault(); doJump(); });
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); doJump(); }
+});
+// Touch support
+window.addEventListener('touchstart', e => { e.preventDefault(); doJump(); }, { passive: false });
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  overlay.style.display = 'none';
+  resetGame();
+});
+document.getElementById('retry-btn').addEventListener('click', () => {
+  gameoverEl.style.display = 'none';
+  resetGame();
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ── Collision ──────────────────────────────────────────────────────────
+function checkCollision() {
+  const cx = cube.position.x;
+  const cy = cube.position.y;
+  const cz = cube.position.z;
+  const half = CUBE_SIZE / 2 * 0.85;
+
+  for (const spike of spikes) {
+    const sp = spike.position;
+    const h  = spike.userData.height;
+    const dx = Math.abs(cx - sp.x);
+    const dz = Math.abs(cz - sp.z);
+    if (dx < 0.5 && dz < 0.5) {
+      // y check: spike tip is at sp.y + h/2
+      if (cy - half < sp.y + h * 0.55) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// ── Particles ─────────────────────────────────────────────────────────
+const particles = [];
+function spawnParticles(pos, color) {
+  for (let i = 0; i < 20; i++) {
+    const geo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+    const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8 });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    p.userData.vel = new THREE.Vector3(
+      (Math.random() - 0.5) * 6,
+      Math.random() * 6 + 2,
+      (Math.random() - 0.5) * 6
+    );
+    p.userData.life = 1.0;
+    scene.add(p);
+    particles.push(p);
+  }
+}
+
+// ── Main Loop ──────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+let   rotAngle = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // Update particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.userData.life -= dt * 1.5;
+    if (p.userData.life <= 0) { scene.remove(p); particles.splice(i, 1); continue; }
+    p.position.addScaledVector(p.userData.vel, dt);
+    p.userData.vel.y += GRAVITY * dt * 0.5;
+    p.material.opacity = p.userData.life;
+    p.material.transparent = true;
+  }
+
+  if (!running) { renderer.render(scene, camera); return; }
+
+  // Move world (move cube forward)
+  const dist = speed * dt;
+
+  // Physics
+  velY += GRAVITY * dt;
+  cube.position.y += velY * dt;
+
+  if (cube.position.y <= GROUND_Y) {
+    cube.position.y = GROUND_Y;
+    velY = 0;
+    onGround = true;
+  } else {
+    onGround = false;
+  }
+
+  // Scroll floor & spikes
+  cube.position.z -= dist;
+  const worldZ = cube.position.z;
+
+  // Keep cube x fixed, scroll everything else by moving cube z
+  // Actually: cube stays at z≈0, obstacles come toward it
+  // Let's use a different approach: move everything toward camera
+  // We'll scroll obstacles and floor
+  cube.position.z = 0; // fix cube Z
+  floor.position.z += dist;
+  gridHelper.position.z += dist;
+  spikes.forEach(s => { s.position.z += dist; });
+
+  // Recycle floor
+  if (floor.position.z > 10 + FLOOR_LENGTH / 2) {
+    floor.position.z -= FLOOR_LENGTH;
+  }
+
+  // Cube rotation (rolling effect)
+  rotAngle -= dist / (CUBE_SIZE / 2);
+  cube.rotation.x = rotAngle;
+
+  // Glow follows cube
+  glowLight.position.copy(cube.position).y += 0.5;
+  glowLight.color.set(CUBE_COLORS[cubeColorIndex].hex);
+
+  // Camera follow
+  camera.position.x += (-4 - camera.position.x) * 5 * dt;
+  camera.position.y += (cube.position.y + 4 - camera.position.y) * 5 * dt;
+  camera.lookAt(cube.position.x + 2, cube.position.y + 1, cube.position.z);
+
+  // Collision
+  if (checkCollision()) {
+    spawnParticles(cube.position.clone(), CUBE_COLORS[cubeColorIndex].hex);
+    running = false;
+    dead    = true;
+    scene.remove(cube);
+    finalScore.textContent = 'Score: ' + Math.floor(score);
+    gameoverEl.style.display = 'flex';
+    // Re-add cube for next game
+    scene.add(cube);
+    return;
+  }
+
+  // Score & speed
+  score += dt * speed;
+  scoreEl.textContent = 'Score: ' + Math.floor(score);
+  speed = 5 + Math.floor(score / 100) * 0.8;
+
+  // Fill light pulse
+  fillLight.intensity = 1.5 + Math.sin(Date.now() * 0.003) * 0.5;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
