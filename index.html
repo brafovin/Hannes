@@ -62,18 +62,32 @@
   <h1>&#x25A0; Cube Dash</h1>
   <p>Spring und fliege über Hindernisse!</p>
   <p>Tippen / Klicken = Springen &nbsp;|&nbsp; Halten = Fliegen</p>
-  <button class="btn-blue" id="start-btn">Spielen</button>
+  <button class="btn-blue" id="start-btn" style="margin-top:24px">Level auswählen</button>
 </div>
+
+<div id="level-select" style="position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.88);z-index:10;color:white;">
+  <h2 style="font-size:36px;margin-bottom:20px;text-shadow:0 0 16px cyan">Level wählen</h2>
+  <div id="level-grid" style="display:flex;flex-direction:column;gap:12px;width:320px"></div>
+</div>
+
 <div id="gameover">
   <h2 class="dead">&#x2715; Game Over</h2>
   <p class="score-line" id="go-score"></p>
-  <button class="btn-red" id="retry-btn">Nochmal</button>
+  <div style="display:flex;gap:14px;margin-top:24px">
+    <button class="btn-red"  id="retry-btn">Nochmal</button>
+    <button class="btn-blue" id="go-select-btn">Level wählen</button>
+  </div>
 </div>
+
 <div id="win">
   <h2 class="win">&#x1F3C6; Gewonnen!</h2>
-  <p>Du hast das Ziel erreicht!</p>
+  <p id="win-level-name" style="font-size:20px;opacity:0.8;margin-top:6px"></p>
   <p class="score-line" id="win-score"></p>
-  <button class="btn-gold" id="again-btn">Nochmal</button>
+  <div style="display:flex;gap:14px;margin-top:24px;flex-wrap:wrap;justify-content:center">
+    <button class="btn-gold"  id="win-next-btn">Nächstes Level &#x25BA;</button>
+    <button class="btn-blue"  id="win-select-btn">Level wählen</button>
+    <button class="btn-red"   id="again-btn">Nochmal</button>
+  </div>
 </div>
 
 <script>
@@ -111,41 +125,142 @@ COLORS.forEach((c, i) => {
 const GROUND_RATIO = 0.75;
 const CUBE_SIZE    = 40;
 const GRAVITY      = 1800;
-const FLY_THRUST   = -2600;  // upward force while holding
+const FLY_THRUST   = -2600;
 const JUMP_V       = -680;
-const BASE_SPEED   = 280;
 
-// Level: spike positions in "world units" (pixels from start)
-// Level total length (world px)
-const LEVEL_LEN = 7000;
-const FINISH_X  = LEVEL_LEN + 200;
+// ── Level definitions ─────────────────────────────────────────────────
+const LEVELS = [
+  {
+    num: 1,
+    name: 'Anfänger',
+    speed: 230,
+    bgTop: '#0a0015', bgBot: '#0d0030',
+    groundColor: '#1a1a44',
+    glowColor: '#4466ff',
+    starColor: 'rgba(255,255,255,',
+    // obstacles: array of {type, wx, ...}
+    obstacles: [
+      // only ground spikes, single, well spaced
+      ...spaced(600, 6200, 500, () => [
+        { type:'spike', h: 42 }
+      ]),
+    ],
+    length: 6800,
+  },
+  {
+    num: 2,
+    name: 'Normal',
+    speed: 300,
+    bgTop: '#001520', bgBot: '#002233',
+    groundColor: '#0a2233',
+    glowColor: '#00aaff',
+    starColor: 'rgba(150,220,255,',
+    obstacles: [
+      ...spaced(600, 7500, 380, () => Math.random()<0.4
+        ? [{ type:'spike', h:44 }, { type:'spike', h:44, dx:38 }]
+        : [{ type:'spike', h:50 }]),
+      ...spaced(900, 7500, 600, () => [
+        { type:'ceiling', h: 55 + Math.random()*20 }
+      ]),
+    ],
+    length: 8000,
+  },
+  {
+    num: 3,
+    name: 'Schwer',
+    speed: 370,
+    bgTop: '#150010', bgBot: '#2a0020',
+    groundColor: '#2a001a',
+    glowColor: '#ff00aa',
+    starColor: 'rgba(255,150,220,',
+    obstacles: [
+      ...spaced(600, 9000, 300, () => Math.random()<0.5
+        ? [{ type:'spike', h:50 }, { type:'spike', h:50, dx:38 }]
+        : [{ type:'spike', h:55 }]),
+      ...spaced(750, 9000, 350, () => [
+        { type:'ceiling', h: 60 + Math.random()*30 }
+      ]),
+      ...spaced(1200, 9000, 700, () => [
+        { type:'block', wyFrac: 0.3 + Math.random()*0.2, bw:35, bh:32 }
+      ]),
+    ],
+    length: 9500,
+  },
+  {
+    num: 4,
+    name: 'Extrem',
+    speed: 450,
+    bgTop: '#100500', bgBot: '#281000',
+    groundColor: '#281000',
+    glowColor: '#ff6600',
+    starColor: 'rgba(255,200,100,',
+    obstacles: [
+      ...spaced(600, 11000, 240, () => {
+        const n = Math.random()<0.5 ? 3 : Math.random()<0.5 ? 2 : 1;
+        return Array.from({length:n}, (_,i) => ({ type:'spike', h:52+i*4, dx:i*38 }));
+      }),
+      ...spaced(700, 11000, 280, () => [
+        { type:'ceiling', h: 65 + Math.random()*35 }
+      ]),
+      ...spaced(1000, 11000, 420, () => [
+        { type:'block', wyFrac: 0.25 + Math.random()*0.3, bw:40, bh:35 }
+      ]),
+      // spike+ceiling combos
+      ...spaced(2000, 11000, 800, () => [
+        { type:'spike', h:48 },
+        { type:'ceiling', h:60, dx:80 },
+      ]),
+    ],
+    length: 11500,
+  },
+  {
+    num: 5,
+    name: 'WAHNSINN',
+    speed: 560,
+    bgTop: '#050000', bgBot: '#150000',
+    groundColor: '#200000',
+    glowColor: '#ff0000',
+    starColor: 'rgba(255,100,100,',
+    obstacles: [
+      ...spaced(600, 13000, 180, () => {
+        const n = 1 + Math.floor(Math.random()*3);
+        return Array.from({length:n}, (_,i) => ({ type:'spike', h:55+i*5, dx:i*38 }));
+      }),
+      ...spaced(650, 13000, 200, () => [
+        { type:'ceiling', h: 70 + Math.random()*45 }
+      ]),
+      ...spaced(900, 13000, 320, () => [
+        { type:'block', wyFrac: 0.2 + Math.random()*0.35, bw:45, bh:38 }
+      ]),
+      ...spaced(1500, 13000, 500, () => [
+        { type:'spike', h:52 },
+        { type:'ceiling', h:65, dx:60 },
+        { type:'block', wyFrac:0.35, bw:30, bh:30, dx:160 },
+      ]),
+    ],
+    length: 13500,
+  },
+];
 
-// obs types: { type:'spike', wx, h } | { type:'floater', wx, wy, w, h }
-// wy = y offset above ground (fraction of groundY), floater = hanging spike from sky
-function buildLevel() {
-  const obs = [];
-  const spikeXs = [600,1100,1500,1900,2250,2550,2850,3150,3450,3700,
-                   3950,4250,4550,4800,5050,5300,5550,5850,6150,6450];
-  for (const x of spikeXs) {
-    const n = Math.random() < 0.35 ? 2 : 1;
-    for (let i = 0; i < n; i++) {
-      obs.push({ type:'spike', wx: x + i*38, h: 44 + Math.random()*22 });
+// Helper: generate evenly spaced obstacle groups
+function spaced(startX, endX, gap, factory) {
+  const result = [];
+  for (let x = startX; x < endX; x += gap + Math.random()*gap*0.4) {
+    const items = factory();
+    for (const item of items) {
+      result.push({ type: item.type, wx: x + (item.dx||0),
+        h: item.h, wyFrac: item.wyFrac, bw: item.bw, bh: item.bh });
     }
   }
-  // Floating obstacles (hang from ceiling / mid-air blocks to dodge under or over)
-  const floatXs = [800,1300,1750,2100,2400,2700,3000,3300,3600,3900,4200,4500,4750,5000,5250,5500,5750,6000,6300,6600];
-  for (const x of floatXs) {
-    // alternate: ceiling spike or mid-air block
-    if (Math.random() < 0.5) {
-      // ceiling spike (points downward)
-      obs.push({ type:'ceiling', wx: x, h: 50 + Math.random()*30 });
-    } else {
-      // mid-air block
-      const floatH = 0.25 + Math.random() * 0.25; // fraction of groundY from top
-      obs.push({ type:'block', wx: x, wyFrac: floatH, bw: 30 + Math.random()*20, bh: 30 });
-    }
-  }
-  return obs;
+  return result;
+}
+
+let currentLevel = 0; // index into LEVELS
+
+function buildLevel(levelIdx) {
+  const def = LEVELS[levelIdx];
+  // deep-copy obstacles so they aren't mutated
+  return def.obstacles.map(o => ({...o}));
 }
 
 // ── State ─────────────────────────────────────────────────────────────
@@ -156,14 +271,13 @@ let cubeY     = 0;
 let velY      = 0;
 let onGround  = true;
 let jumpsLeft = 2;
-let flying    = false;  // holding button = fly mode
-let worldX    = 0;   // how far we've scrolled (world px)
+let flying    = false;
+let worldX    = 0;
 let score     = 0;
-let speed     = BASE_SPEED;
+let speed     = LEVELS[0].speed;
 let obstacles = [];
 let particles = [];
 let stars     = [];
-let bgLayers  = [];
 let rotAngle  = 0;
 
 // Parallax BG columns
@@ -179,19 +293,22 @@ function buildBG() {
   }
 }
 
-function resetGame() {
-  dead     = false;
-  won      = false;
-  score    = 0;
-  speed    = BASE_SPEED;
-  worldX   = 0;
+function resetGame(levelIdx) {
+  if (levelIdx !== undefined) currentLevel = levelIdx;
+  const def = LEVELS[currentLevel];
+
+  dead      = false;
+  won       = false;
+  score     = 0;
+  speed     = def.speed;
+  worldX    = 0;
   velY      = 0;
   onGround  = true;
   jumpsLeft = 2;
   flying    = false;
   rotAngle  = 0;
   particles = [];
-  obstacles = buildLevel();
+  obstacles = buildLevel(currentLevel);
   buildBG();
 
   const gh = canvas.height;
@@ -199,6 +316,7 @@ function resetGame() {
 
   document.getElementById('gameover').style.display = 'none';
   document.getElementById('win').style.display      = 'none';
+  document.getElementById('level-select').style.display = 'none';
   running = true;
 }
 
@@ -226,18 +344,45 @@ window.addEventListener('keyup', e => {
 window.addEventListener('touchstart', e => { e.preventDefault(); pressStart(); }, { passive: false });
 window.addEventListener('touchend',   e => { e.preventDefault(); pressEnd();   }, { passive: false });
 
-document.getElementById('start-btn').addEventListener('click', () => {
-  document.getElementById('overlay').style.display = 'none';
-  resetGame();
+// Build level-select buttons
+const levelGrid = document.getElementById('level-grid');
+const DIFF_COLORS = ['#00aaff','#44ee44','#ffcc00','#ff8800','#ff3333'];
+LEVELS.forEach((lv, i) => {
+  const btn = document.createElement('button');
+  btn.style.cssText = `padding:12px 20px;font-size:17px;font-weight:bold;border:none;
+    border-radius:10px;cursor:pointer;background:${DIFF_COLORS[i]};
+    color:${i>=3?'#fff':'#000'};box-shadow:0 0 12px ${DIFF_COLORS[i]}88;
+    transition:transform 0.1s;`;
+  btn.textContent = `Level ${lv.num}: ${lv.name}`;
+  btn.addEventListener('mouseenter', () => btn.style.transform='scale(1.04)');
+  btn.addEventListener('mouseleave', () => btn.style.transform='scale(1)');
+  btn.addEventListener('click', () => { resetGame(i); });
+  levelGrid.appendChild(btn);
 });
+
+function showLevelSelect() {
+  document.getElementById('overlay').style.display    = 'none';
+  document.getElementById('gameover').style.display   = 'none';
+  document.getElementById('win').style.display        = 'none';
+  document.getElementById('level-select').style.display = 'flex';
+  running = false;
+}
+
+document.getElementById('start-btn').addEventListener('click', showLevelSelect);
 document.getElementById('retry-btn').addEventListener('click', () => {
   document.getElementById('gameover').style.display = 'none';
   resetGame();
 });
+document.getElementById('go-select-btn').addEventListener('click', showLevelSelect);
 document.getElementById('again-btn').addEventListener('click', () => {
   document.getElementById('win').style.display = 'none';
   resetGame();
 });
+document.getElementById('win-next-btn').addEventListener('click', () => {
+  document.getElementById('win').style.display = 'none';
+  resetGame(Math.min(currentLevel + 1, LEVELS.length - 1));
+});
+document.getElementById('win-select-btn').addEventListener('click', showLevelSelect);
 
 // ── Particles ─────────────────────────────────────────────────────────
 function spawnParticles(screenX, screenY, color) {
@@ -427,9 +572,8 @@ function loop(ts) {
     // Rolling (spin faster when flying)
     rotAngle += dist / (CUBE_SIZE / 2) * (onGround ? 1 : flying ? 2 : 0.5);
 
-    // Score
+    // Score (speed stays fixed per level — set by level def)
     score += dist / 10;
-    speed  = BASE_SPEED + Math.floor(score / 80) * 18;
 
     // Collision check
     const cubeLeft   = cubeScreenX + 5;
@@ -470,14 +614,18 @@ function loop(ts) {
     }
 
     // Win check
-    const finishScreenX = FINISH_X - worldX + cubeScreenX;
-    if (finishScreenX < cubeScreenX + CUBE_SIZE/2) {
+    const levelLen = LEVELS[currentLevel].length;
+    if (worldX >= levelLen) {
       running = false;
       won     = true;
       spawnParticles(cubeScreenX + CUBE_SIZE/2, cubeY + CUBE_SIZE/2, '#ffdd00');
       spawnParticles(cubeScreenX + CUBE_SIZE/2, cubeY + CUBE_SIZE/2, '#00ffcc');
       setTimeout(() => {
+        const isLast = currentLevel === LEVELS.length - 1;
         document.getElementById('win-score').textContent = 'Score: ' + Math.floor(score);
+        document.getElementById('win-level-name').textContent = `Level ${LEVELS[currentLevel].num}: ${LEVELS[currentLevel].name} geschafft!`;
+        document.getElementById('win-next-btn').style.display = isLast ? 'none' : 'inline-block';
+        document.getElementById('win-select-btn').style.display = 'inline-block';
         document.getElementById('win').style.display = 'flex';
       }, 800);
     }
@@ -494,11 +642,12 @@ function loop(ts) {
   }
 
   // ── Draw ─────────────────────────────────────────────────────────────
-  // Background gradient
+  const def = LEVELS[currentLevel];
+
+  // Background gradient (level-themed)
   const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-  bgGrad.addColorStop(0,   '#0a0015');
-  bgGrad.addColorStop(0.6, '#0d0030');
-  bgGrad.addColorStop(1,   '#1a0050');
+  bgGrad.addColorStop(0,   def.bgTop);
+  bgGrad.addColorStop(1,   def.bgBot);
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
 
@@ -509,19 +658,19 @@ function loop(ts) {
     const sy = s.y * groundY;
     ctx.beginPath();
     ctx.arc(sx, sy, s.r, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(255,255,255,${0.3 + s.r * 0.2})`;
+    ctx.fillStyle = def.starColor + (0.3 + s.r * 0.2) + ')';
     ctx.fill();
   }
 
   // Ground
   const floorGrad = ctx.createLinearGradient(0, groundY, 0, H);
-  floorGrad.addColorStop(0, '#1a1a44');
-  floorGrad.addColorStop(1, '#0a0a22');
+  floorGrad.addColorStop(0, def.groundColor);
+  floorGrad.addColorStop(1, '#050505');
   ctx.fillStyle = floorGrad;
   ctx.fillRect(0, groundY, W, H - groundY);
 
   // Grid lines on floor
-  ctx.strokeStyle = 'rgba(100,100,200,0.18)';
+  ctx.strokeStyle = 'rgba(150,150,255,0.12)';
   ctx.lineWidth = 1;
   const gridSpacing = 60;
   const gridOff = worldX % gridSpacing;
@@ -529,9 +678,9 @@ function loop(ts) {
     ctx.beginPath(); ctx.moveTo(gx, groundY); ctx.lineTo(gx, H); ctx.stroke();
   }
   // Glowing ground line
-  ctx.shadowColor = '#4466ff';
-  ctx.shadowBlur  = 12;
-  ctx.strokeStyle = '#4466ff';
+  ctx.shadowColor = def.glowColor;
+  ctx.shadowBlur  = 14;
+  ctx.strokeStyle = def.glowColor;
   ctx.lineWidth   = 2;
   ctx.beginPath(); ctx.moveTo(0, groundY); ctx.lineTo(W, groundY); ctx.stroke();
   ctx.shadowBlur  = 0;
@@ -569,7 +718,7 @@ function loop(ts) {
   }
 
   // Finish gate
-  const finSX = FINISH_X - worldX + cubeScreenX;
+  const finSX = LEVELS[currentLevel].length - worldX + cubeScreenX;
   if (finSX > -200 && finSX < W + 200) {
     drawFinishGate(finSX, groundY);
   }
@@ -600,23 +749,31 @@ function loop(ts) {
     ctx.fillText('Score: ' + Math.floor(score) + (flying ? '  🚀' : ''), 16, 36);
     ctx.shadowBlur = 0;
 
+    // Level label top-right
+    ctx.fillStyle = def.glowColor;
+    ctx.font = 'bold 16px Arial';
+    ctx.shadowColor = def.glowColor; ctx.shadowBlur = 8;
+    ctx.textAlign = 'right';
+    ctx.fillText(`Level ${def.num}: ${def.name}`, W - 60, 32);
+    ctx.textAlign = 'left'; ctx.shadowBlur = 0;
+
     // Progress bar
     const barW = Math.min(W * 0.5, 400);
     const barX = (W - barW) / 2, barY = 14;
-    const prog = Math.min(worldX / LEVEL_LEN, 1);
+    const prog = Math.min(worldX / LEVELS[currentLevel].length, 1);
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.beginPath(); ctx.roundRect(barX, barY, barW, 10, 5); ctx.fill();
     const barFill = ctx.createLinearGradient(barX, 0, barX + barW, 0);
-    barFill.addColorStop(0, '#00aaff');
+    barFill.addColorStop(0, def.glowColor);
     barFill.addColorStop(1, '#00ffcc');
     ctx.fillStyle = barFill;
     ctx.shadowColor = '#00ffcc'; ctx.shadowBlur = 8;
     ctx.beginPath(); ctx.roundRect(barX, barY, barW * prog, 10, 5); ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Fortschritt', W/2, barY + 22);
+    ctx.fillText(Math.floor(prog*100) + '%', W/2, barY + 22);
     ctx.textAlign = 'left';
   }
 }
