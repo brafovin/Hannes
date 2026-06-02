@@ -102,6 +102,59 @@
       box-shadow: 0 0 20px #ff444488;
     }
     #retry-btn:hover { transform: scale(1.05); }
+    #win {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.82);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      color: white;
+    }
+    #win h2 { font-size: 58px; color: #ffdd00; text-shadow: 0 0 30px #ffaa00, 0 0 60px #ff8800; margin-bottom: 10px; }
+    #win .subtitle { font-size: 22px; opacity: 0.85; margin-bottom: 6px; }
+    #win .win-score { font-size: 28px; color: #00ffcc; text-shadow: 0 0 10px #00ffcc; margin-top: 8px; }
+    #play-again-btn {
+      margin-top: 28px;
+      padding: 14px 48px;
+      font-size: 22px;
+      background: linear-gradient(135deg, #ffcc00, #ff8800);
+      border: none;
+      border-radius: 12px;
+      color: #000;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 0 24px #ffaa0088;
+      transition: transform 0.1s;
+    }
+    #play-again-btn:hover { transform: scale(1.06); }
+    #progress-bar {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      max-width: 500px;
+      z-index: 10;
+    }
+    #progress-bar label { color: white; font-size: 12px; opacity: 0.7; display: block; margin-bottom: 4px; text-align: center; }
+    #progress-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00aaff, #00ffcc);
+      border-radius: 4px;
+      transition: width 0.1s;
+      box-shadow: 0 0 8px #00ffcc;
+    }
   </style>
 </head>
 <body>
@@ -127,6 +180,18 @@
   <h2>&#x2715; Game Over</h2>
   <p id="final-score"></p>
   <button id="retry-btn">Nochmal</button>
+</div>
+
+<div id="win">
+  <h2>&#x1F3C6; Gewonnen!</h2>
+  <p class="subtitle">Du hast das Ziel erreicht!</p>
+  <p class="win-score" id="win-score"></p>
+  <button id="play-again-btn">Nochmal spielen</button>
+</div>
+
+<div id="progress-bar">
+  <label>Fortschritt</label>
+  <div id="progress-track"><div id="progress-fill"></div></div>
 </div>
 
 <script type="importmap">
@@ -278,6 +343,41 @@ function makeSpikeGroup(x, z, count = 1) {
   return group;
 }
 
+const FINISH_WORLD_Z = -185;
+
+function buildFinishGate() {
+  const group = new THREE.Group();
+
+  // Two pillars
+  const pillarGeo = new THREE.BoxGeometry(0.3, 5, 0.3);
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0xffdd00, emissive: 0xffaa00, emissiveIntensity: 0.8, metalness: 0.8 });
+  const left  = new THREE.Mesh(pillarGeo, pillarMat); left.position.set(-2, 2.5, 0); left.castShadow = true;
+  const right = new THREE.Mesh(pillarGeo, pillarMat); right.position.set( 2, 2.5, 0); right.castShadow = true;
+  group.add(left, right);
+
+  // Crossbar
+  const barGeo = new THREE.BoxGeometry(4.6, 0.35, 0.3);
+  const bar = new THREE.Mesh(barGeo, pillarMat); bar.position.set(0, 5.15, 0);
+  group.add(bar);
+
+  // Glowing banner plane
+  const bannerGeo = new THREE.PlaneGeometry(4, 1.2);
+  const bannerMat = new THREE.MeshStandardMaterial({ color: 0xffee44, emissive: 0xffcc00, emissiveIntensity: 1.2, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+  const banner = new THREE.Mesh(bannerGeo, bannerMat); banner.position.set(0, 4.5, 0);
+  group.add(banner);
+
+  // Finish text via point light glow
+  const goalLight = new THREE.PointLight(0xffcc00, 4, 8);
+  goalLight.position.set(0, 3, 0);
+  group.add(goalLight);
+
+  group.position.set(0, 0, FINISH_WORLD_Z);
+  scene.add(group);
+  return group;
+}
+
+let finishGate = null;
+
 function spawnObstacles() {
   spikes.length = 0;
   const positions = [
@@ -288,41 +388,60 @@ function spawnObstacles() {
     const group = makeSpikeGroup(-0.2, -z, count);
     spikes.push(...group);
   }
+
+  if (finishGate) scene.remove(finishGate);
+  finishGate = buildFinishGate();
 }
 
 // ── Game State ────────────────────────────────────────────────────────
 let running = false;
 let dead    = false;
+let won     = false;
 let score   = 0;
 let speed   = 5;
 let velY    = 0;
-let onGround = true;
+let onGround  = true;
+let traveled  = 0;
+const LEVEL_LENGTH = 185;
 const GRAVITY = -22;
 const JUMP_V  = 9;
 const GROUND_Y = CUBE_SIZE / 2;
 
-const scoreEl    = document.getElementById('score');
-const overlay    = document.getElementById('overlay');
-const gameoverEl = document.getElementById('gameover');
-const finalScore = document.getElementById('final-score');
+const scoreEl      = document.getElementById('score');
+const overlay      = document.getElementById('overlay');
+const gameoverEl   = document.getElementById('gameover');
+const winEl        = document.getElementById('win');
+const finalScore   = document.getElementById('final-score');
+const winScore     = document.getElementById('win-score');
+const progressFill = document.getElementById('progress-fill');
 
 function resetGame() {
-  dead  = false;
-  score = 0;
-  speed = 5;
-  velY  = 0;
+  dead     = false;
+  won      = false;
+  score    = 0;
+  speed    = 5;
+  velY     = 0;
+  traveled = 0;
   onGround = true;
 
-  // remove old spikes
   spikes.forEach(s => scene.remove(s));
   spawnObstacles();
+
+  // Reset finish gate position
+  if (finishGate) finishGate.position.set(0, 0, FINISH_WORLD_Z);
+
+  // Reset floor/grid
+  floor.position.set(0, -0.25, -FLOOR_LENGTH / 2 + 10);
+  gridHelper.position.set(0, 0.01, -FLOOR_LENGTH / 2 + 10);
 
   cube.position.set(0, GROUND_Y, 0);
   cube.rotation.set(0, 0, 0);
   cubeMat.color.set(CUBE_COLORS[cubeColorIndex].hex);
   cubeMat.emissive.set(CUBE_COLORS[cubeColorIndex].hex);
 
+  progressFill.style.width = '0%';
   gameoverEl.style.display = 'none';
+  winEl.style.display = 'none';
   running = true;
 }
 
@@ -348,6 +467,10 @@ document.getElementById('start-btn').addEventListener('click', () => {
 });
 document.getElementById('retry-btn').addEventListener('click', () => {
   gameoverEl.style.display = 'none';
+  resetGame();
+});
+document.getElementById('play-again-btn').addEventListener('click', () => {
+  winEl.style.display = 'none';
   resetGame();
 });
 
@@ -434,18 +557,17 @@ function animate() {
     onGround = false;
   }
 
-  // Scroll floor & spikes
-  cube.position.z -= dist;
-  const worldZ = cube.position.z;
-
-  // Keep cube x fixed, scroll everything else by moving cube z
-  // Actually: cube stays at z≈0, obstacles come toward it
-  // Let's use a different approach: move everything toward camera
-  // We'll scroll obstacles and floor
-  cube.position.z = 0; // fix cube Z
+  // Scroll world toward cube
+  traveled += dist;
+  cube.position.z = 0;
   floor.position.z += dist;
   gridHelper.position.z += dist;
   spikes.forEach(s => { s.position.z += dist; });
+  if (finishGate) finishGate.position.z += dist;
+
+  // Progress bar
+  const pct = Math.min(traveled / LEVEL_LENGTH * 100, 100);
+  progressFill.style.width = pct + '%';
 
   // Recycle floor
   if (floor.position.z > 10 + FLOOR_LENGTH / 2) {
@@ -475,6 +597,19 @@ function animate() {
     gameoverEl.style.display = 'flex';
     // Re-add cube for next game
     scene.add(cube);
+    return;
+  }
+
+  // Win condition — cube passed the finish gate
+  if (finishGate && finishGate.position.z > 2) {
+    running = false;
+    won = true;
+    winScore.textContent = 'Score: ' + Math.floor(score);
+    winEl.style.display = 'flex';
+    progressFill.style.width = '100%';
+    spawnParticles(cube.position.clone(), '#ffdd00');
+    spawnParticles(cube.position.clone(), '#00ffcc');
+    renderer.render(scene, camera);
     return;
   }
 
